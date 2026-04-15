@@ -42,6 +42,7 @@ with open(output_path, "w", newline="") as csvfile:
     writer = csv.writer(csvfile)
     writer.writerow([
         "filename", "word_count", "char_count", "model",
+        "observer_model", "performer_model",
         "perplexity", "cross_perplexity", "binoculars_score",
         "threshold", "classification", "ai_probability",
     ])
@@ -67,6 +68,8 @@ with open(output_path, "w", newline="") as csvfile:
             word_count,
             char_count,
             args.model,
+            details["observer_model"],
+            details["performer_model"],
             f"{details['perplexity']:.4f}",
             f"{details['cross_perplexity']:.4f}",
             f"{score:.4f}",

@@ -51,6 +51,9 @@ class Binoculars(object):
         self.observer_model.eval()
         self.performer_model.eval()
 
+        self.observer_name = observer_name_or_path
+        self.performer_name = performer_name_or_path
+
         self.tokenizer = AutoTokenizer.from_pretrained(observer_name_or_path, local_files_only=True)
         if not self.tokenizer.pad_token:
             self.tokenizer.pad_token = self.tokenizer.eos_token
@@ -105,6 +108,8 @@ class Binoculars(object):
             "perplexity": ppl.tolist()[0] if single else ppl.tolist(),
             "cross_perplexity": x_ppl.tolist()[0] if single else x_ppl.tolist(),
             "binoculars_score": binoculars_scores.tolist()[0] if single else binoculars_scores.tolist(),
+            "observer_model": self.observer_name,
+            "performer_model": self.performer_name,
         }
 
     def predict(self, input_text: Union[list[str], str]) -> Union[list[str], str]:
