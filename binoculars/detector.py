@@ -20,8 +20,15 @@ huggingface_config = {
 BINOCULARS_ACCURACY_THRESHOLD = 0.9015310749276843  # optimized for f1-score
 BINOCULARS_FPR_THRESHOLD = 0.8536432310785527  # optimized for low-fpr [chosen at 0.01%]
 
-DEVICE_1 = "cuda:0" if torch.cuda.is_available() else "cpu"
-DEVICE_2 = "cuda:1" if torch.cuda.device_count() > 1 else DEVICE_1
+if torch.cuda.is_available():
+    DEVICE_1 = "cuda:0"
+    DEVICE_2 = "cuda:1" if torch.cuda.device_count() > 1 else DEVICE_1
+elif torch.backends.mps.is_available():
+    DEVICE_1 = "mps"
+    DEVICE_2 = "mps"
+else:
+    DEVICE_1 = "cpu"
+    DEVICE_2 = "cpu"
 
 
 class Binoculars(object):
@@ -37,15 +44,13 @@ class Binoculars(object):
         self.change_mode(mode)
         self.observer_model = AutoModelForCausalLM.from_pretrained(observer_name_or_path,
                                                                    device_map={"": DEVICE_1},
-                                                                   trust_remote_code=True,
-                                                                   torch_dtype=torch.bfloat16 if use_bfloat16
+                                                                   dtype=torch.bfloat16 if use_bfloat16
                                                                    else torch.float32,
                                                                    token=huggingface_config["TOKEN"]
                                                                    )
         self.performer_model = AutoModelForCausalLM.from_pretrained(performer_name_or_path,
                                                                     device_map={"": DEVICE_2},
-                                                                    trust_remote_code=True,
-                                                                    torch_dtype=torch.bfloat16 if use_bfloat16
+                                                                    dtype=torch.bfloat16 if use_bfloat16
                                                                     else torch.float32,
                                                                     token=huggingface_config["TOKEN"]
                                                                     )
@@ -80,11 +85,11 @@ class Binoculars(object):
     def _get_logits(self, encodings: transformers.BatchEncoding) -> torch.Tensor:
         observer_logits = self.observer_model(**encodings.to(DEVICE_1)).logits
         performer_logits = self.performer_model(**encodings.to(DEVICE_2)).logits
-        if DEVICE_1 != "cpu":
+        if DEVICE_1.startswith("cuda"):
             torch.cuda.synchronize()
         return observer_logits, performer_logits
 
-    def compute_score(self, input_text: Union[list[str], str]) -> Union[float, list[float]]:
+    def _compute(self, input_text: Union[list[str], str]):
         batch = [input_text] if isinstance(input_text, str) else input_text
         encodings = self._tokenize(batch)
         observer_logits, performer_logits = self._get_logits(encodings)
@@ -92,8 +97,21 @@ class Binoculars(object):
         x_ppl = entropy(observer_logits.to(DEVICE_1), performer_logits.to(DEVICE_1),
                         encodings.to(DEVICE_1), self.tokenizer.pad_token_id)
         binoculars_scores = ppl / x_ppl
+        return ppl, x_ppl, binoculars_scores
+
+    def compute_score(self, input_text: Union[list[str], str]) -> Union[float, list[float]]:
+        _, _, binoculars_scores = self._compute(input_text)
         binoculars_scores = binoculars_scores.tolist()
         return binoculars_scores[0] if isinstance(input_text, str) else binoculars_scores
+
+    def compute_score_detailed(self, input_text: Union[list[str], str]) -> dict:
+        ppl, x_ppl, binoculars_scores = self._compute(input_text)
+        single = isinstance(input_text, str)
+        return {
+            "perplexity": ppl.tolist()[0] if single else ppl.tolist(),
+            "cross_perplexity": x_ppl.tolist()[0] if single else x_ppl.tolist(),
+            "binoculars_score": binoculars_scores.tolist()[0] if single else binoculars_scores.tolist(),
+        }
 
     def predict(self, input_text: Union[list[str], str]) -> Union[list[str], str]:
         binoculars_scores = np.array(self.compute_score(input_text))
