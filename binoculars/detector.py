@@ -1,6 +1,5 @@
 from typing import Union
 
-import os
 import numpy as np
 import torch
 import transformers
@@ -10,11 +9,6 @@ from .utils import assert_tokenizer_consistency
 from .metrics import perplexity, entropy
 
 torch.set_grad_enabled(False)
-
-huggingface_config = {
-    # Only required for private models from Huggingface (e.g. LLaMA models)
-    "TOKEN": os.environ.get("HF_TOKEN", None)
-}
 
 # selected using Falcon-7B and Falcon-7B-Instruct at bfloat16
 BINOCULARS_ACCURACY_THRESHOLD = 0.9015310749276843  # optimized for f1-score
@@ -46,18 +40,18 @@ class Binoculars(object):
                                                                    device_map={"": DEVICE_1},
                                                                    dtype=torch.bfloat16 if use_bfloat16
                                                                    else torch.float32,
-                                                                   token=huggingface_config["TOKEN"]
+                                                                   local_files_only=True,
                                                                    )
         self.performer_model = AutoModelForCausalLM.from_pretrained(performer_name_or_path,
                                                                     device_map={"": DEVICE_2},
                                                                     dtype=torch.bfloat16 if use_bfloat16
                                                                     else torch.float32,
-                                                                    token=huggingface_config["TOKEN"]
+                                                                    local_files_only=True,
                                                                     )
         self.observer_model.eval()
         self.performer_model.eval()
 
-        self.tokenizer = AutoTokenizer.from_pretrained(observer_name_or_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(observer_name_or_path, local_files_only=True)
         if not self.tokenizer.pad_token:
             self.tokenizer.pad_token = self.tokenizer.eos_token
         self.max_token_observed = max_token_observed
