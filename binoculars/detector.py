@@ -115,7 +115,7 @@ class Binoculars(object):
     def predict(self, input_text: Union[list[str], str]) -> Union[list[str], str]:
         binoculars_scores = np.array(self.compute_score(input_text))
         pred = np.where(binoculars_scores < self.threshold,
-                        "Most likely AI-generated",
-                        "Most likely human-generated"
+                        "AI_Written",
+                        "Human_Written"
                         ).tolist()
         return pred
